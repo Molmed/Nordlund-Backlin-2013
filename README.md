@@ -1,7 +1,7 @@
 Genome-wide signatures of differential DNA methylation in pediatric acute lymphoblastic leukemia
 ======================
 
-Nordlund J, [Bäcklin C](http://stackoverflow.com/users/840460/backlin), Wahlberg P, Busche S, Berglund EC, Eloranta M-L, Flaegstad T, Forestier E,  Frost B-M, Harila-Saari A, Heyman M, Jónsson OG, Larsson R, Palle J,  Rönnblom L, Schmiegelow K, Sinnett D, Söderhäll S, Pastinen T, Gustafsson MG, Lönnerholm G & Syvänen AC
+[Nordlund J](http://scholar.google.se/citations?user=ZztFeTEAAAAJ&hl=sv&oi=ao), [Bäcklin C](http://stackoverflow.com/users/840460/backlin), Wahlberg P, Busche S, Berglund EC, Eloranta M-L, Flaegstad T, Forestier E,  Frost B-M, Harila-Saari A, Heyman M, Jónsson OG, Larsson R, Palle J,  Rönnblom L, Schmiegelow K, Sinnett D, Söderhäll S, Pastinen T, Gustafsson MG, Lönnerholm G & Syvänen AC
 
 Original publication: [Link to publication to be added here](#)
 
