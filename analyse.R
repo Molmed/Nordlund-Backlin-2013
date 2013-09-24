@@ -1,40 +1,37 @@
-
 #===============================================================================
 #   Setup
 #-------------------------------------------------------------------------------
 
-data.dir <- "~/data_ALL/nordlund2013paper"
-work.dir <- "~/ALL/repo/code/publish/testrun"
-
+if(!file.exists("results")) dir.create("results")
+if(!exists("number.of.cores")) number.of.cores <- 8
 
 library(doSNOW)
-cl <- makeCluster(8)
+cl <- makeCluster(number.of.cores)
 registerDoSNOW(cl)
 
+setwd("data")
+if(!exists("met.pheno")) load("phenotypes.Rdata")
+if(!exists("met.annot")) load("annotations.Rdata")
+if(!exists("met.data"))  load("methylation.Rdata")
+if(!exists("affy.data")) load("geneexpression.Rdata")
+setwd("../results")
 
-#===============================================================================
-#   Initialize
-#-------------------------------------------------------------------------------
 
-setwd(data.dir)
-load("pheno.Rdata")
-load("SupplementalTable1.Rdata")
-load("intensities_processed.Rdata")
-setwd(work.dir)
+
 
 site.idx <- with(met.annot, CHR %in% 1:22 & !snp.hit & !bwa.multi.hit)
-all.met <- all.met[site.idx,]
+met.data <- met.data[site.idx,]
 met.annot <- met.annot[site.idx,]
 
 patterns <- c(control="(MethDNA(Pos|Neg)_\\d+|WGA_CTRL_\\d+)",
     reference="(\\d{3}_[BT]|cd34_e1)", diagnosis="ALL_\\d+",
     remission="Constitutional_\\d+", `relapse 1`="ALL_\\d+r1", 
     `relapse 2`="ALL_\\d+r2")
-all.pheno$sample.type <- factor(NA, levels=names(patterns))
+met.pheno$sample.type <- factor(NA, levels=names(patterns))
 for(i in seq(patterns))
-    all.pheno$sample.type[grep(patterns[i], all.pheno$sample.name)] <- names(patterns)[i]
+    met.pheno$sample.type[grep(patterns[i], met.pheno$sample.name)] <- names(patterns)[i]
 
-types <- table(all.pheno$subtype)
+types <- table(met.pheno$subtype)
 types <- setdiff(names(types)[types >= 10], "undefined")
 
 
@@ -43,23 +40,23 @@ types <- setdiff(names(types)[types >= 10], "undefined")
 #-------------------------------------------------------------------------------
 
 ref.idx <- lapply(c(BCP="B", T="T"), function(x)
-    grepl(paste0("^(\\d{3}_", x, "|cd34_e1|Constitutional_\\d+)$"), all.pheno$sample.name))
+    grepl(paste0("^(\\d{3}_", x, "|cd34_e1|Constitutional_\\d+)$"), met.pheno$sample.name))
 ref.low.var <- lapply(ref.idx, function(x)
-    parRapply(cl, all.met[,x], sd, na.rm=TRUE) < .1)
+    parRapply(cl, met.data[,x], sd, na.rm=TRUE) < .1)
 
 dmc <- pval <- dbeta <- structure(vector("list", length(types)), names=types)
 for(my.type in types){
     cat(my.type, "\n")
-    my.idx <- all.pheno$subtype %in% my.type
+    my.idx <- met.pheno$subtype %in% my.type
     my.ref <- if(my.type == "T-ALL") "T" else "BCP"
     y <- factor(rep(1:2, c(sum(ref.idx[[my.ref]]), sum(my.idx))),
                 labels=c("reference", my.type))
     clusterExport(cl, "y")
     pval[[my.type]] <- parRapply(cl,
-        cbind(all.met[,ref.idx[[my.ref]]], all.met[,my.idx]),
+        cbind(met.data[,ref.idx[[my.ref]]], met.data[,my.idx]),
         function(x) do.call(wilcox.test, unname(split(x, y)))$p.value)
-    dbeta[[my.type]] <- parRapply(cl, all.met[,my.idx], mean, na.rm=TRUE) -
-                        parRapply(cl, all.met[,ref.idx[[my.ref]]], mean, na.rm=TRUE)
+    dbeta[[my.type]] <- parRapply(cl, met.data[,my.idx], mean, na.rm=TRUE) -
+                        parRapply(cl, met.data[,ref.idx[[my.ref]]], mean, na.rm=TRUE)
     dmc[[my.type]] <- p.adjust(pval[[my.type]], "fdr") < .01 &
                       abs(dbeta[[my.type]]) > .2 &
                       ref.low.var[[my.ref]]
@@ -73,14 +70,14 @@ dmc$constitutive <- Reduce("&", dmc[1:8])
 dmc[types] <- lapply(dmc[types], "&", Reduce("+", dmc[types]) < 2)
 
 # Relapse DMCs
-relapse.ind <- which(all.pheno$sample.type %in% "relapse 1")
-diagnosis.ind <- match(sub("r1$", "", all.pheno$sample.name[relapse.ind]),
-                       all.pheno$sample.name)
+relapse.ind <- which(met.pheno$sample.type %in% "relapse 1")
+diagnosis.ind <- match(sub("r1$", "", met.pheno$sample.name[relapse.ind]),
+                       met.pheno$sample.name)
 y <- gl(2, length(diagnosis.ind), labels=c("diagnosis", "relapse"))
-pval$relapse <- apply(all.met[,c(diagnosis.ind, relapse.ind)], 1,
+pval$relapse <- apply(met.data[,c(diagnosis.ind, relapse.ind)], 1,
       function(x) do.call(wilcox.test, c(unname(split(x, y)), list(paired=TRUE)))$p.value)
-dbeta$relapse <- apply(all.met[,relapse.ind], 1, mean, na.rm=TRUE) -
-                 apply(all.met[,diagnosis.ind], 1, mean, na.rm=TRUE)
+dbeta$relapse <- apply(met.data[,relapse.ind], 1, mean, na.rm=TRUE) -
+                 apply(met.data[,diagnosis.ind], 1, mean, na.rm=TRUE)
 dmc$relapse <- pval$relapse < .01 &
                abs(dbeta$relapse) > .2
 
@@ -108,22 +105,22 @@ i <- dge.pheno$sample.type %in% c("healthy B", "healthy T")
 dge.id[i] <- sub("([BT])_(\\d+)", "\\2_\\1", dge.id[i])
 dge.id[!i] <- as.character(dge.pheno$fmca.id[!i])
 
-sample.ind <- do.call(rbind, lapply(all.pheno$id, function(my.id){
+sample.ind <- do.call(rbind, lapply(met.pheno$id, function(my.id){
     data.frame(id=my.id,
-               met=which(all.pheno$id %in% my.id),
+               met=which(met.pheno$id %in% my.id),
                dge=tail(c(NA, which(dge.id %in% my.id)), 1),
-               affy=c(which(affy.info$id %in% my.id), NA)[1],
-               subtype=all.pheno$subtype[all.pheno$id %in% my.id])
+               affy=c(which(affy.pheno$id %in% my.id), NA)[1],
+               subtype=met.pheno$subtype[met.pheno$id %in% my.id])
 }))
 sample.ind$subtype <- as.character(sample.ind$subtype)
-sample.ind$subtype[grepl("^normal", all.pheno$accession)] <- "reference"
+sample.ind$subtype[grepl("^normal", met.pheno$accession)] <- "reference"
 sample.ind <- sample.ind[(!is.na(sample.ind$dge) | !is.na(sample.ind$affy))
                          & !sample.ind$subtype %in% c("undefined", NA),]
 
 # Reduce dataset, since it will be exported to all workers
 site.idx <- Reduce("|", dmc)
 dmc <- lapply(dmc, "[", site.idx)
-all.met <- all.met[site.idx,]
+met.data <- met.data[site.idx,]
 met.annot <- met.annot[site.idx,]
 
 # Gene to CpG-site mappings
@@ -136,16 +133,16 @@ gene2met <- foreach(g = met.genes, .options.mpi=list(chunkSize=20)) %dopar% {
 names(gene2met) <- met.genes
 met2x <- list(
     dge = foreach(g=met.genes, m=gene2met, .combine=rbind) %dopar% {
-        d <- which(dge.anot$gene.name %in% g)
+        d <- which(dge.annot$gene.name %in% g)
         if(length(d) == 0) return(NULL)
         data.frame(gene=g, expand.grid(met=m, dge=d))
     },
     affy = foreach(g=met.genes, m=gene2met, .combine=rbind) %dopar% {
-        a <- grep(paste0("(^| )", g, "( |$)"), affy.anot$Gene.Symbol)
+        a <- grep(paste0("(^| )", g, "( |$)"), affy.annot$Gene.Symbol)
         if(length(a) == 0) return(NULL)
         data.frame(gene=g, expand.grid(met=m, affy=a))
     })
-met2x$dge <- met2x$dge[dge.anot$sense[met2x$dge$dge] %in% "sense",]
+met2x$dge <- met2x$dge[dge.annot$sense[met2x$dge$dge] %in% "sense",]
 
 types <- table(sample.ind$subtype)
 types <- c("all", names(types[types > 2]))
@@ -175,7 +172,7 @@ for(my.type in types){
         paste(unique(strsplit(rr, ";")[[1]][strsplit(gg, ";")[[1]] %in% g]), collapse=";"),
         feat$gene, UCSC_REFGENE_NAME[feat$met], UCSC_REFGENE_GROUP[feat$met])
     if(expr.type %in% "affy")
-        feat$Probe.Set.ID <- affy.anot$Probe.Set.ID[feat$affy]
+        feat$Probe.Set.ID <- affy.annot$Probe.Set.ID[feat$affy]
 
     if(my.type == "all"){
         group.ind <- !is.na(sample.ind$dge) & !sample.ind$subtype %in% "reference"
@@ -184,8 +181,8 @@ for(my.type in types){
         group.ind <- !is.na(sample.ind$affy) & sample.ind$subtype %in% my.type
         other.ind <- !is.na(sample.ind$affy) & !sample.ind$subtype %in% my.type
     }
-    feat$met.group <- apply(all.met[feat$met, sample.ind$met[group.ind]], 1, mean, na.rm=TRUE)
-    feat$met.other <- apply(all.met[feat$met, sample.ind$met[other.ind]], 1, mean, na.rm=TRUE)
+    feat$met.group <- apply(met.data[feat$met, sample.ind$met[group.ind]], 1, mean, na.rm=TRUE)
+    feat$met.other <- apply(met.data[feat$met, sample.ind$met[other.ind]], 1, mean, na.rm=TRUE)
 
     my.expr <- if(expr.type == "dge") dge.data else affy.data
     # Note that this does not copy the data as long as long as we don't modify `my.expr`
@@ -199,7 +196,7 @@ for(my.type in types){
     #   |     |   | |     |     |---' |     ,---| |     |---'
     #   `---' `---' `     `     `---' `---' `---^ `---' `---'
 
-    my.met <- data.frame(t(all.met[feat$met, c(sample.ind$met[group.ind], sample.ind$met[other.ind])]))
+    my.met <- data.frame(t(met.data[feat$met, c(sample.ind$met[group.ind], sample.ind$met[other.ind])]))
     my.expr <- data.frame(t(my.expr[feat[[expr.type]], c(sample.ind[[expr.type]][group.ind], sample.ind[[expr.type]][other.ind])]))
     feat$cor.r <- mapply(function(x,y) cor(x, y, use="pair"), my.met, my.expr)
 
@@ -256,12 +253,12 @@ impute.knn <- function(x, k=.05, distmat){
     x
 }
 
-all.met <- t(all.met)
-all.dist <- dist(all.met)
+met.data <- t(met.data)
+all.dist <- dist(met.data)
 save(all.dist, file="all_dist.Rdata")
 
-all.met <- impute.knn(all.met, distmat=all.dist)
-all.pca <- prcomp(all.met)
+met.data <- impute.knn(met.data, distmat=all.dist)
+all.pca <- prcomp(met.data)
 
 plot(all.pca$x[,1], all.pca$x[,2])
 

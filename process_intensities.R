@@ -1,43 +1,27 @@
-
 #===============================================================================
 #   Parse annotations
 #-------------------------------------------------------------------------------
 
-in.file <- "SupplementalTable1.txt.gz"
-in.file.Rdata <- sub("\\.txt$", ".Rdata", in.file)
-
-if(file.exists(in.file.Rdata)){
-    columns <- strsplit(readLines(in.file, n=1), "\t")[[1]]
-
-    met.annot <- read.csv(in.file,
-        header=TRUE, sep="\t", nrows=485577,
-        colClasses=c("character", "factor", "integer", "character",
-                     "integer", "character", "character", "factor",
-                     "character", "character", "character", "character",
-                     "factor", "character", "character",
-                     # probe filtering
-                     "integer", "integer", "integer",
-                     # Histone marks
-                     "integer", "integer", "integer", "integer", 
-                     "integer", "integer", "integer", "integer",
-                     # DMCS
-                     "integer", "integer", "integer", "integer", 
-                     "integer", "integer", "integer", "integer", 
-                     "integer", "integer", "integer", "integer"))
-    # Make the chromosome name a factor manually to get the order right
-    met.annot$CHR <- factor(met.annot$CHR, levels=c(1:22, c("X", "Y")))
-    met.annot$CHROMOSOME_36 <- factor(met.annot$CHROMOSOME_36,
-        levels=c(levels(met.annot$CHR), "MULTI"))
-    met.annot[16:38] <- lapply(met.annot[16:38], as.logical)
-
-    save(met.annot, file=in.file.Rdata)
-} else {
-    load(in.file.Rdata)
+if(!"GEOquery" %in% rownames(installed.packages())){
+    source("http://www.bioconductor.org/biocLite.R")
+    biocLite("GEOquery")
 }
+require("GEOquery")
+
+
+x <- getGEO("GSE49031")
+
+download.file("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE49nnn/GSE49031/suppl/GSE49031_methylated_unmethylated_signal_intensities.txt.gz", "intensities.txt.gz")
+
+
+
 
 
 #===============================================================================
-#   Parse methylation into R
+#   Download and parse infinium methylation array intensities into R
+#
+#   This data consist of back ground corrected signal intensities exported from
+#   Genome Studio (Illumina inc.).
 #
 #   Line by line instead of using read.table to be more memory efficient.
 #   It is slow, but managable, since it only needs to be done once.
