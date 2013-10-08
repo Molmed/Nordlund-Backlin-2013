@@ -1,13 +1,10 @@
 #===============================================================================
-#   Download and parse gene expression data into R
+#   Download and process gene expression data
 #-------------------------------------------------------------------------------
 
-if(!"GEOquery" %in% rownames(installed.packages())){
-    source("http://bioconductor.org/biocLite.R")
-    biocLite("GEOquery")
-}
-library(GEOquery)
-library(plyr)
+options(stringsAsFactors=FALSE)
+require(GEOquery)
+require(plyr)
 
 if(!exists("all.pheno")) load("data/phenotypes.Rdata")
 
@@ -16,7 +13,7 @@ if(!exists("all.pheno")) load("data/phenotypes.Rdata")
 #   Affymetrix gene expression
 #-------------------------------------------------------------------------------
 
-in.file <- "GSE47051_series_matrix.txt.gz"
+in.file <- "data/GSE47051_series_matrix.txt.gz"
 if(!file.exists(in.file))
     download.file("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE47nnn/GSE47051/matrix/GSE47051_series_matrix.txt.gz", in.file)
 affy <- getGEO(filename=in.file, destdir="data")
@@ -86,12 +83,15 @@ names(dge.annot) <- c("transcript.id", "gene.name")
 #-----------------------o
 #   Phenotypes
 
+# The `dge2met.csv` file will soon be added to the GEO sample series
+dge.key <- read.csv("data/dge2met.csv", sep="\t", header=TRUE)
 dg <- lapply(dge.geo, phenoData)
 dge.pheno <- with(rbind.fill(dg[[1]]@data, dg[[2]]@data), data.frame(
     title = as.character(title),
     geo.accession = as.character(geo_accession),
     stringsAsFactors=FALSE))
-dge.pheno <- dge.pheno[match(colnames(dge.data), sub("undef", "Undef", sub("-", ".", dge.pheno$title))),]
+dge.pheno <- rev(merge(dge.pheno, dge.key, by.x="title", by.y="dge.id", all.x=TRUE))
+names(dge.pheno)[1] <- "id"
 
 
 #===============================================================================

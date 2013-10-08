@@ -1,69 +1,63 @@
 #===============================================================================
-#   Parse annotations
-#-------------------------------------------------------------------------------
-
-if(!"GEOquery" %in% rownames(installed.packages())){
-    source("http://www.bioconductor.org/biocLite.R")
-    biocLite("GEOquery")
-}
-require("GEOquery")
-
-
-x <- getGEO("GSE49031")
-
-download.file("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE49nnn/GSE49031/suppl/GSE49031_methylated_unmethylated_signal_intensities.txt.gz", "intensities.txt.gz")
-
-
-
-
-
-#===============================================================================
-#   Download and parse infinium methylation array intensities into R
+#   Download and procuss infinium methylation array intensities
 #
 #   This data consist of back ground corrected signal intensities exported from
 #   Genome Studio (Illumina inc.).
-#
-#   Line by line instead of using read.table to be more memory efficient.
-#   It is slow, but managable, since it only needs to be done once.
+# #
+# #   Line by line instead of using read.table to be more memory efficient.
+# #   It is slow, but managable, since it only needs to be done once.
 #-------------------------------------------------------------------------------
 
-in.file <- "intensities.txt"
+options(stringsAsFactors=FALSE)
+if(!exists("met.annot"))
+    load("data/annotations.Rdata")
 
-con <- file(in.file, "r")
-read.con <- function() strsplit(readLines(con, n=1L), "\t")[[1]]
-columns <- read.con()
-ind <- grep("Unmethylated Signal$", columns)
-all.met <- matrix(NA, 485577, length(ind),
-    dimnames=list(site=met.annot$TargetID,
-        sample=sub(" Unmethylated Signal$", "", columns[ind])))
-site.names <- rep(NA, nrow(all.met))
+in.file <- "data/intensities.txt.gz"
+if(!file.exists(in.file))
+    download.file("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE49nnn/GSE49031/suppl/GSE49031_methylated_unmethylated_signal_intensities.txt.gz", in.file)
 
-for(i in 1:nrow(all.met)){
-    l <- read.con()
-    site.names[i] <- l[1]
-    a <- as.numeric(l[ind])
-    b <- as.numeric(l[ind+1])
-    # Remove probles with detection p-value > .01
-    all.met[i,] <- ifelse(as.numeric(l[ind+2]) <= 0.01, b/(a+b+100), NA)
-}
-close(con)
-if(any(site.names != met.annot$TargetID))
+# The following section took us about 50 minutes to run, so be patient
+columns <- unlist(read.csv(in.file, nrow=1L, sep="\t", header=FALSE))
+met.U <- read.csv(in.file, nrow=485577L, header=TRUE, sep="\t",
+    colClasses=c(ID_REF="character", Unmethylated="numeric", Methylated="NULL",
+                 Detection="NULL")[sub("^\\w+ (\\w+) \\w+$", "\\1", columns)])
+if(any(met.U$ID_REF != met.annot$TargetID))
     stop("Probes do not match between annotations and data")
+met.U <- as.matrix(met.U[-1])
+met.M <- as.matrix(read.csv(in.file, nrow=485577L, header=TRUE, sep="\t",
+    colClasses=c(ID_REF="NULL", Unmethylated="NULL", Methylated="numeric",
+                 Detection="NULL")[sub("^\\w+ (\\w+) \\w+$", "\\1", columns)]))
+met.pval <- as.matrix(read.csv(in.file, nrow=485577L, header=TRUE, sep="\t",
+    colClasses=c(ID_REF="NULL", Unmethylated="NULL", Methylated="NULL",
+                 Detection="numeric")[sub("^\\w+ (\\w+) \\w+$", "\\1", columns)]))
+
+save(met.U, met.M, met.pval, file="data/intensities.Rdata", compress=FALSE)
 
 
 #===============================================================================
-#   Peak based correction (Dedeurwaerder et al 2011)
+#   Convert to beta-values and perform peak based correction
+#   (Dedeurwaerder et al 2011).
+#
+#   This is how the data was prepared for the paper.
 #-------------------------------------------------------------------------------
 
+# Convert to beta values
+met.data <- met.M / (met.U + met.M + 100)
+rm(met.U, met.M)
+met.data[met.pval > .01] <- NA
+rm(met.pval)
+
+
+# Perform peak-base correction
 type <- as.integer(met.annot$INFINIUM_DESIGN_TYPE)
 logit <- function(x) log2(x/(1-x))
 delogit <- function(x) 2^x/(1+2^x)
 get.densities <- function(bw="nrd0"){
-    # The type II data in met.data is too large to be handled in one go
-    list(density(all.met[type == 1,], bw=bw, na.rm=TRUE),
-         density(all.met[which(type == 2)[c(T,F,F)],], bw=bw, na.rm=TRUE),
-         density(all.met[which(type == 2)[c(F,T,F)],], bw=bw, na.rm=TRUE),
-         density(all.met[which(type == 2)[c(F,F,T)],], bw=bw, na.rm=TRUE))
+    # The type II data in met.data was too large to handle in one go on our computer
+    list(density(met.data[type == 1,], bw=bw, na.rm=TRUE),
+         density(met.data[which(type == 2)[c(T,F,F)],], bw=bw, na.rm=TRUE),
+         density(met.data[which(type == 2)[c(F,T,F)],], bw=bw, na.rm=TRUE),
+         density(met.data[which(type == 2)[c(F,F,T)],], bw=bw, na.rm=TRUE))
 }
 get.peaks <- function(dd, lim){
     if(diff(lim) < 0) stop("Incorrect `lim`")
@@ -73,7 +67,7 @@ get.peaks <- function(dd, lim){
     })
 }
 
-all.met <- logit(all.met)
+met.data <- logit(met.data)
 # Since we're only interested in the location of the modes we can use a
 # predefined bandwidth, which is faster to compute but coverges more slowly
 # towards the true distribution.
@@ -85,35 +79,10 @@ typeII.scale <- c(lower = peaks.rescaling[1,1] / mean(peaks.rescaling[1,-1]),
                   upper = peaks.rescaling[2,1] / mean(peaks.rescaling[2,-1]))
 # A vectorized solution would be faster, but for loops require less memory
 for(i in which(type == 2)){
-    all.met[i,] <- all.met[i,] * typeII.scale[1 + (all.met[i,] >= 0)]
+    met.data[i,] <- met.data[i,] * typeII.scale[1 + (met.data[i,] >= 0)]
 }
-all.met <- delogit(all.met)
+met.data <- delogit(met.data)
 
+save(met.data, file="data/methylation.Rdata", compress=FALSE)
 
-
-#===============================================================================
-#   Export the processed data, both as .Rdata and .txt files
-#-------------------------------------------------------------------------------
-
-in.file <- "intensities.txt"
-out.file <- "intensities_processed.txt"
-save(all.met, file=sub("\\.txt", ".Rdata", out.file))
-
-con <- file(in.file, "r")
-read.con <- function() strsplit(readLines(con, n=1L), "\t")[[1]]
-my.cat <- function(..., append=TRUE){
-    cat(..., sep="\t", file=out.file, append=append)
-    cat("\n", file=out.file, append=TRUE)
-}
-columns <- read.con()
-ind <- grep("Detection Pval$", columns)
-
-my.cat("ID_REF",
-       rbind(sub("Unmethylated Signal$", "Average Beta", columns[ind]),
-          sub("Unmethylated Signal$", "Detection Pval", columns[ind])), append=FALSE)
-for(i in 1:nrow(all.met)){
-    l <- read.con()
-    my.cat(l[1], rbind(sprintf("%.7f", all.met[i,]), l[ind]))
-}
-close(con)
 

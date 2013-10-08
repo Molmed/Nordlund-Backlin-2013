@@ -22,12 +22,11 @@ columns <- unlist(read.csv(in.file, nrow=1L, sep="\t", header=FALSE))
 x <- read.csv(in.file, nrow=485577L, header=TRUE, sep="\t",
     colClasses=c(ID_REF="character", Beta="numeric", Pval="numeric")[sub(".* ", "", columns)])
 
-all.met <- do.call(cbind, x[grep("Beta", names(x))])
-all.met.pval <- do.call(cbind, x[grep("Pval", names(x))])
+met.data <- do.call(cbind, x[grep("Beta", names(x))])
+met.pval <- do.call(cbind, x[grep("Pval", names(x))])
 rm(x)
-all.met[all.met.pval > .01] <- NA
-rm(all.met.pval)
-all.met <- all.met[met.annot$analyzed,]
+met.data[met.pval > .01] <- NA
+rm(met.pval)
 
-save(all.met, file="data/methylation.Rdata", compress=FALSE)
+save(met.data, file="data/methylation.Rdata", compress=FALSE)
 

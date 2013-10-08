@@ -1,8 +1,6 @@
 #===============================================================================
-#   Download and parse infinium methylation array probe annotations into R
+#   Download and process infinium methylation array probe annotations
 #-------------------------------------------------------------------------------
-
-options(stringsAsFactors=FALSE)
 
 in.file <- "data/SupplementalTable1.txt.gz"
 if(!file.exists(in.file))

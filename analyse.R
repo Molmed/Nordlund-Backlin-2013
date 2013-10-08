@@ -1,38 +1,34 @@
 #===============================================================================
 #   Setup
+#
+#   By default this scripts use parallelization through the `foreach`, `SNOW`
+#   and `doSNOW` packages. If you cannot run these you will need to manually
+#   convert `analyses.R` to single thread mode.
+#
+    number.of.cores <- 8
+#
 #-------------------------------------------------------------------------------
 
-if(!file.exists("results")) dir.create("results")
-if(!exists("number.of.cores")) number.of.cores <- 8
+tryCatch({
+    setwd("data")
+    if(!exists("met.data"))  load("methylation.Rdata")
+    if(!exists("met.annot")) load("annotations.Rdata")
+    if(!exists("met.pheno")) load("phenotypes.Rdata")
+    if(!exists("affy.data")) load("geneexpression.Rdata")
+    setwd("../results")
 
-library(doSNOW)
-cl <- makeCluster(number.of.cores)
-registerDoSNOW(cl)
-
-setwd("data")
-if(!exists("met.pheno")) load("phenotypes.Rdata")
-if(!exists("met.annot")) load("annotations.Rdata")
-if(!exists("met.data"))  load("methylation.Rdata")
-if(!exists("affy.data")) load("geneexpression.Rdata")
-setwd("../results")
-
-
-
+    require(doSNOW)
+    cl <- makeCluster(number.of.cores)
+    registerDoSNOW(cl)
+}, error=function(...)
+    cat("Could not setup analysis environment. Did you run `setup.R` first?\n"))
 
 site.idx <- with(met.annot, CHR %in% 1:22 & !snp.hit & !bwa.multi.hit)
 met.data <- met.data[site.idx,]
 met.annot <- met.annot[site.idx,]
 
-patterns <- c(control="(MethDNA(Pos|Neg)_\\d+|WGA_CTRL_\\d+)",
-    reference="(\\d{3}_[BT]|cd34_e1)", diagnosis="ALL_\\d+",
-    remission="Constitutional_\\d+", `relapse 1`="ALL_\\d+r1", 
-    `relapse 2`="ALL_\\d+r2")
-met.pheno$sample.type <- factor(NA, levels=names(patterns))
-for(i in seq(patterns))
-    met.pheno$sample.type[grep(patterns[i], met.pheno$sample.name)] <- names(patterns)[i]
-
 types <- table(met.pheno$subtype)
-types <- setdiff(names(types)[types >= 10], "undefined")
+types <- setdiff(names(types)[types >= 10], c("non-recurrent", "undefined"))
 
 
 #===============================================================================
@@ -40,7 +36,7 @@ types <- setdiff(names(types)[types >= 10], "undefined")
 #-------------------------------------------------------------------------------
 
 ref.idx <- lapply(c(BCP="B", T="T"), function(x)
-    grepl(paste0("^(\\d{3}_", x, "|cd34_e1|Constitutional_\\d+)$"), met.pheno$sample.name))
+    grepl(paste0("^(\\d{3}_", x, "|cd34_e1|Constitutional_\\d+)$"), met.pheno$id))
 ref.low.var <- lapply(ref.idx, function(x)
     parRapply(cl, met.data[,x], sd, na.rm=TRUE) < .1)
 
@@ -71,8 +67,8 @@ dmc[types] <- lapply(dmc[types], "&", Reduce("+", dmc[types]) < 2)
 
 # Relapse DMCs
 relapse.ind <- which(met.pheno$sample.type %in% "relapse 1")
-diagnosis.ind <- match(sub("r1$", "", met.pheno$sample.name[relapse.ind]),
-                       met.pheno$sample.name)
+diagnosis.ind <- match(sub("r1$", "", met.pheno$id[relapse.ind]),
+                       met.pheno$id)
 y <- gl(2, length(diagnosis.ind), labels=c("diagnosis", "relapse"))
 pval$relapse <- apply(met.data[,c(diagnosis.ind, relapse.ind)], 1,
       function(x) do.call(wilcox.test, c(unname(split(x, y)), list(paired=TRUE)))$p.value)
@@ -92,30 +88,19 @@ save(site.idx, sites, dmc, pval, dbeta, dmg, file="dmc.Rdata")
 #   Correlation with gene expression
 #-------------------------------------------------------------------------------
 
-library(analyse450k)
-load.450k.anot(c("affy", "dge"))
-
 affy.data[affy.data < 3] <- 3
 dge.data <- log2(dge.data)
 dge.data[dge.data == -Inf] <- 0
 
-# Sample mappings
-dge.id <- dge.pheno$id
-i <- dge.pheno$sample.type %in% c("healthy B", "healthy T")
-dge.id[i] <- sub("([BT])_(\\d+)", "\\2_\\1", dge.id[i])
-dge.id[!i] <- as.character(dge.pheno$fmca.id[!i])
-
-sample.ind <- do.call(rbind, lapply(met.pheno$id, function(my.id){
-    data.frame(id=my.id,
-               met=which(met.pheno$id %in% my.id),
-               dge=tail(c(NA, which(dge.id %in% my.id)), 1),
-               affy=c(which(affy.pheno$id %in% my.id), NA)[1],
-               subtype=met.pheno$subtype[met.pheno$id %in% my.id])
-}))
-sample.ind$subtype <- as.character(sample.ind$subtype)
-sample.ind$subtype[grepl("^normal", met.pheno$accession)] <- "reference"
-sample.ind <- sample.ind[(!is.na(sample.ind$dge) | !is.na(sample.ind$affy))
-                         & !sample.ind$subtype %in% c("undefined", NA),]
+sample.ind <- data.frame(id=met.pheno$id,
+    met = 1:nrow(met.pheno),
+    affy = match(met.pheno$id, affy.pheno$id),
+    dge = match(met.pheno$id, dge.pheno$id),
+    subtype=as.character(met.pheno$subtype),
+    stringsAsFactors=FALSE)
+sample.ind$subtype[grepl("^normal", met.pheno$disease.state)] <- "reference"
+sample.ind <- subset(sample.ind, (!is.na(affy) | !is.na(dge)) &
+                     !subtype %in% c("undefined", NA))
 
 # Reduce dataset, since it will be exported to all workers
 site.idx <- Reduce("|", dmc)
@@ -142,10 +127,10 @@ met2x <- list(
         if(length(a) == 0) return(NULL)
         data.frame(gene=g, expand.grid(met=m, affy=a))
     })
-met2x$dge <- met2x$dge[dge.annot$sense[met2x$dge$dge] %in% "sense",]
+#met2x$dge <- met2x$dge[dge.annot$sense[met2x$dge$dge] %in% "sense",]
 
 types <- table(sample.ind$subtype)
-types <- c("all", names(types[types > 2]))
+types <- c("all", setdiff(names(types[types > 2]), c("non-recurrent", "reference")))
 cor.table <- vector("list", length(types))
 names(cor.table) <- types
 

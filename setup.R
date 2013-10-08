@@ -1,39 +1,52 @@
 #===============================================================================
 #
-#   This script is the overall pipeline for the analysis code. It downloads all
-#   necessary data, sets up the environment and performs the analyses.
+#   This script sets up the environment required for the analysis code.
+#   After this script has finised you can run `analyse.R`.
 #
 #   By default only the processed beta values will be downloaded. To also
 #   download the unnormalized signal intensities set this variable to TRUE
 #
     download.intensities <- FALSE
 #
-#   By default the analysis scripts use parallelization through the `foreach`,
-#   `SNOW` and `doSNOW` packages. If you cannot run these you will need to
-#   manually convert `analyses.R` to single thread mode.
-#
-    number.of.cores <- 8
-#
 #-------------------------------------------------------------------------------
+
+
+#-------------------------------o
+#   Make directory structure
 
 dir.create("data", showWarnings=FALSE)
 dir.create("results", showWarnings=FALSE)
 
-if(file.exists("data/phenotypes.Rdata")){
-    load("data/phenotypes.Rdata")
-} else {
+
+#-------------------------------o
+#   Install required packages
+
+required.pkg <- c("plyr", "doSNOW")
+required.bioc.pkg <- c("GEOquery")
+installed.pkg <- rownames(installed.packages())
+
+required.pkg <- required.pkg[!required.pkg %in% installed.pkg]
+required.bioc.pkg <- required.bioc.pkg[!required.bioc.pkg %in% installed.pkg]
+
+if(!is.null(required.pkg)) install.packages(required.pkg)
+if(!is.null(required.bioc.pkg)){
+    source("http://bioconductor.org/biocLite.R")
+    biocLite(required.bioc.pkg)
+}
+
+
+#-------------------------------o
+#   Download and prepare data
+
+if(!file.exists("data/phenotypes.Rdata")){
     source("process_phenotypes.R")
 }
 
-if(file.exists("data/annotations.Rdata")){
-    load("data/annotations.Rdata")
-} else {
+if(!file.exists("data/annotations.Rdata")){
     source("process_annotations.R")
 }
 
-if(file.exists("data/geneexpression.Rdata")){
-    load("data/geneexpression.Rdata")
-} else {
+if(!file.exists("data/geneexpression.Rdata")){
     source("process_geneexpression.R")
 }
 
@@ -42,11 +55,7 @@ if(download.intensities && !file.exists("data/intensities.Rdata")){
     source("process_intensities.R")
 }
 
-if(file.exists("data/methylation.Rdata")){
-    load("data/methylation.Rdata")
-} else {
+if(!file.exists("data/methylation.Rdata")){
     source("process_methylation.R")
 }
-
-source("analyse.R")
 
