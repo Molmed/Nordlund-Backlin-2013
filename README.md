@@ -13,7 +13,7 @@ R version 2.15.3 or later. Packages [`plyr`](http://plyr.had.co.nz/) and [`GEOqu
 
 Parallelization using the [`foreach`](http://cran.r-project.org/web/packages/foreach/index.html) and [`doSNOW`](http://cran.r-project.org/web/packages/doSNOW/index.html) packages is recommended, but not required.
 
-Figures were annotated using the [`biomaRt`](http://www.bioconductor.org/packages/2.12/bioc/html/biomaRt.html) and [`GenomeGraphs`](http://www.bioconductor.org/packages/2.12/bioc/html/GenomeGraphs.html) packages.
+Figures were annotated using the [`biomaRt`](http://www.bioconductor.org/packages/2.12/bioc/html/biomaRt.html) and [`GenomeGraphs`](http://www.bioconductor.org/packages/2.12/bioc/html/GenomeGraphs.html) packages. However, code for producing the figures is not included.
 
 Instructions
 ------------
