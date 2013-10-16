@@ -50,7 +50,6 @@ if(!file.exists("data/geneexpression.Rdata")){
     source("process_geneexpression.R")
 }
 
-# TODO!!
 if(download.intensities && !file.exists("data/intensities.Rdata")){
     source("process_intensities.R")
 }
