@@ -28,8 +28,8 @@ installed.pkg <- rownames(installed.packages())
 required.pkg <- required.pkg[!required.pkg %in% installed.pkg]
 required.bioc.pkg <- required.bioc.pkg[!required.bioc.pkg %in% installed.pkg]
 
-if(!is.null(required.pkg)) install.packages(required.pkg)
-if(!is.null(required.bioc.pkg)){
+if(length(required.pkg) > 0) install.packages(required.pkg)
+if(length(required.bioc.pkg) > 0){
     source("http://bioconductor.org/biocLite.R")
     biocLite(required.bioc.pkg)
 }

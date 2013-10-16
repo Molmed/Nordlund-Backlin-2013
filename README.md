@@ -1,7 +1,7 @@
 Genome-wide signatures of differential DNA methylation in pediatric acute lymphoblastic leukemia
 ======================
 
-[Nordlund J](http://scholar.google.se/citations?user=ZztFeTEAAAAJ&hl=sv&oi=ao), [Bäcklin C](http://stackoverflow.com/users/840460/backlin), Wahlberg P, Busche S, Berglund EC, Eloranta M-L, Flaegstad T, Forestier E,  Frost B-M, Harila-Saari A, Heyman M, Jónsson OG, Larsson R, Palle J,  Rönnblom L, Schmiegelow K, Sinnett D, Söderhäll S, Pastinen T, Gustafsson MG, Lönnerholm G & Syvänen AC
+[Nordlund J](http://scholar.google.se/citations?user=ZztFeTEAAAAJ), [Bäcklin C](http://scholar.google.se/citations?user=ZMtuZXsAAAAJ), Wahlberg P, Busche S, Berglund EC, Eloranta M-L, Flaegstad T, Forestier E,  Frost B-M, Harila-Saari A, Heyman M, Jónsson OG, Larsson R, Palle J,  Rönnblom L, Schmiegelow K, Sinnett D, Söderhäll S, Pastinen T, Gustafsson MG, Lönnerholm G & Syvänen AC
 
 Original publication: [Genome Biology 2013, 14:r105](http://genomebiology.com/2013/14/9/r105/abstract)
 
@@ -24,4 +24,4 @@ Download all scripts in this repo to a new directory. The most convenient way to
     R -f setup.R
     R -f analyse.R
 
-`setup.R` will download all data from [GEO](www.ncbi.nlm.nih.gov/geo/), prepare it for use in R and store it in a new subfolder called `data`. `analyse.R` will run the analyses, produce the results and save them in a new subfolder called `results`. Plots are not produced.
+`setup.R` will download all data from [GEO](http://www.ncbi.nlm.nih.gov/geo/), prepare it for use in R and store it in a new subfolder called `data`. `analyse.R` will run the analyses, produce the results and save them in a new subfolder called `results`. Plots are not produced.

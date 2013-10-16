@@ -29,8 +29,8 @@ met.pheno <- with(phenoData(gse)@data, data.frame(
     geo.accession = as.character(geo_accession),
     title = as.character(title),
     sample.type = factor(NA, levels=names(sample.type.patterns)),
-    lapply(char.fields, function(x) factor(sub("^.*: ", "", met.pheno[[x]]))),
-    tissue = factor(met.pheno$source_name_ch1),
+    lapply(char.fields, function(x) factor(sub("^.*: ", "", get(x)))),
+    tissue = factor(source_name_ch1),
     stringsAsFactors=FALSE))
 
 for(i in seq(sample.type.patterns))
